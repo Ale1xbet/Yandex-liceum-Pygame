@@ -1,227 +1,165 @@
 import pygame
-from random import randint
-import math as m
-import textures
+import os
+import sys
 import config
+from random import randint
 
-size = w, h = 10 * config.SIZE, 10 * config.SIZE
+class Texture(pygame.sprite.Sprite):
+    def __init__(self, image_name, x_pos, y_pos, *group):
+        super().__init__(*group)
+        fullname = os.path.join("Assets/" + image_name)
+        if not os.path.isfile(fullname):
+            print(f"Файл с изображением '{fullname}' не найден")
+            sys.exit()
 
-class Board:
-    def __init__(self, width, height, cll_sz, level="default"):
-        self.width = width
-        self.height = height
-        self.board = [[0] * width for _ in range(height)]
-        self.left = 10
-        self.top = 10
+        image = pygame.image.load(fullname)
+
+        self.image = image
+        self.rect = self.image.get_rect()
+
+        self.rect.x = round((x_pos + 1 / 2) * config.SIZE - self.rect.width / 2)
+        self.rect.y = round((y_pos + 1 / 2) * config.SIZE - self.rect.height / 2)
+
+
+    def set_pos(self, x_pos, y_pos):
+        self.rect.x = x_pos
+        self.rect.y = y_pos
+
+
+class Gamefield:
+    def __init__(self, wid, hei, cll_sz, hero_pos):
+        self.map = [[0 for _ in range(wid)] for __ in range(hei)]
+        self.wid = wid
+        self.hei = hei
         self.cell_size = cll_sz
         self.sprites = pygame.sprite.Group()
+        self.hero_pos = hero_pos
 
-        if level == "default":
-            i = 19
-            while i != 0:
-                pos = randint(0, 99)
-                x, y = pos % self.width, pos // self.width
+        self.generate_walls()
+        self.generate_ores()
 
-                if (x, y) != (4, 4):
-                    if self.board[y][x] == 0:
-                        self.board[y][x] = 1
-                        i -= 1
-        else:
-            self.load_level(level)
+    def generate_walls(self):
+        cnt = 0
+        while cnt != self.wid * self.hei // 5:
+            coord = randint(0, self.wid * self.hei - 1)
+            wl_x, wl_y = coord % self.wid, coord // self.wid
+            if self.map[wl_y][wl_x] == 0 and [wl_y, wl_x] != [4, 4]:
+                self.map[wl_y][wl_x] = 1
 
-        self.print_board()
-
-    def print_board(self, *hero_coords):
-        board_copy = self.board[::]
-        if hero_coords:
-            x, y = hero_coords
-            board_copy[y][x] = "*"
-
-        for row in board_copy:
-            print(*row)
+                cnt += 1
 
 
-    def set_view(self, left, top, cell_size):
-        self.left = left
-        self.top = top
-        self.cell_size = cell_size
+    def generate_ores(self):
+        cnt = 0
+        while cnt != self.wid * self.hei // 7:
+            coord = randint(0, self.wid * self.hei - 1)
+            ore_x, ore_y = coord % self.wid, coord // self.wid
+
+            if self.map[ore_y][ore_x] == 0 and [ore_y, ore_x] != [4, 4]:
+                self.map[ore_y][ore_x] = randint(2, 5) * 2 - 1
+
+                cnt += 1
 
 
-    def get_cell(self, pos):
-        cell_x = m.ceil((pos[0] - self.left) / self.cell_size)
-        cell_y = m.ceil((pos[1] - self.top) / self.cell_size)
+    def render_interface(self, stats, screen):
+        iron_icon = Texture(config.TEXTURES[4], 0, 0, self.sprites)
+        gold_icon = Texture(config.TEXTURES[6], 0, 0, self.sprites)
+        diamond_icon = Texture(config.TEXTURES[8], 0, 0, self.sprites)
+        emerald_icon = Texture(config.TEXTURES[10], 0, 0, self.sprites)
 
-        if self.width >= cell_x >= 1 and self.height >= cell_y >= 1:
-            return cell_x, cell_y
-        else:
-            return None
+        iron_icon.set_pos(400, 5)
+        gold_icon.set_pos(425, 5)
+        diamond_icon.set_pos(450, 5)
+        emerald_icon.set_pos(475, 5)
+
+        font = pygame.font.Font(None, 16)
+        text = font.render(str(config.STATS["iron"]), 1, "white")
+
+        screen.blit(text, (410, 15))
+
+        font = pygame.font.Font(None, 16)
+        text = font.render(str(config.STATS["gold"]), 1, "white")
+
+        screen.blit(text, (435, 15))
+
+        font = pygame.font.Font(None, 16)
+        text = font.render(str(config.STATS["diamond"]), 1, "white")
+
+        screen.blit(text, (460, 15))
+
+        font = pygame.font.Font(None, 16)
+        text = font.render(str(config.STATS["emerald"]), 1, "white")
+
+        screen.blit(text, (485, 15))
 
 
-    def render(self):
-        for i in range(self.height):
-            for j in range(self.width):
-                object_id = self.board[i][j]
-                new_sprite = textures.BoardTexture(config.TEXTURES[object_id], j, i, self.sprites)
 
-    def render_ores(self, screen):
-        x, y = config.HERO_COORDS
-        ore_sprites = pygame.sprite.Group()
-        for ore_coords in config.ORES_COORDS["iron"]:
-            o_x, o_y = ore_coords
-            ch_x, ch_y = config.ABSOLUTE_HERO_COORDS
-            if abs(o_x - ch_x) <= 5 and abs(o_y - ch_y) <= 5:
-                related_coords = x + (o_x - ch_x), y + (o_y - ch_y)
-                rel_x, rel_y = related_coords
-                if self.board[rel_y][rel_x] == 0:
-                    textures.BoardTexture(config.TEXTURES[3], 4 + o_x - ch_x, 4 - o_y + ch_y, ore_sprites)
+    def render_textures(self, screen):
+        self.sprites.clear(screen, screen)
+        for i in range(self.hei):
+            for j in range(self.wid):
+                object_id = self.map[i][j]
+                new_sprite = Texture(config.TEXTURES[object_id], j, i, self.sprites)
 
-        ore_sprites.draw(screen)
-        
+
+    def render_hero(self):
+        new_sprite = Texture(config.TEXTURES[2], self.hero_pos[0], self.hero_pos[1], self.sprites)
 
 
     def move_hero(self, direction):
-        x, y = config.HERO_COORDS
-        abs_x, abs_y = config.ABSOLUTE_HERO_COORDS
-        mc = config.MOVE_COUNTER
-        if direction == "up":
-            if y != 0:
-                if self.board[y - 1][x] == 0:
-                    config.HERO_SPRITE.rect.y -= config.SIZE
-                    y -= 1
-                    abs_y += 1
-                    mc += 1
-
-        elif direction == "down":
-            if y != self.height - 1:
-                if self.board[y + 1][x] == 0:
-                    config.HERO_SPRITE.rect.y += config.SIZE
-                    y += 1
-                    abs_y -= 1
-                    mc += 1
-
-        elif direction == "left":
-            if x != 0:
-                if self.board[y][x - 1] == 0:
-                    config.HERO_SPRITE.rect.x -= config.SIZE
-                    x -= 1
-                    abs_x -= 1
-                    mc += 1
-
-        elif direction == "right":
-            if x != self.width - 1:
-                if self.board[y][x + 1] == 0:
-                    config.HERO_SPRITE.rect.x += config.SIZE
-                    x += 1
-                    abs_x += 1
-                    mac += 1
-
-        config.ABSOLUTE_HERO_COORDS = [abs_x, abs_y]
-        config.MOVE_COUNTER = mc
-        config.HERO_COORDS= [x, y]
-    
-
-    def move_textures(self, direction):
-        x, y = config.HERO_COORDS
-        mc = config.MOVE_COUNTER
-        abs_x, abs_y = config.ABSOLUTE_HERO_COORDS
-        #self.print_board(x, y)
+        hr_x, hr_y = self.hero_pos
 
         if direction == "up":
-            if y != 0:
-                if self.board[y - 1][x] == 0:
-                    for sprite in self.sprites:
-                        sprite.rect.y += config.SIZE
-                        if sprite.rect.y >= h:
-                            sprite.rect.y = 0
-                    
-                    y -= 1
-                    abs_y += 1
-                    mc += 1
-            else:
-                if self.board[self.height - 1][x] == 0:
-                    for sprite in self.sprites:
-                        sprite.rect.y += config.SIZE
-                        if sprite.rect.y >= h:
-                            sprite.rect.y = 0
-
-                    y = self.height - 1
-                    abs_y += 1
-                    mc += 1
+            if hr_y != 0:
+                if self.map[hr_y - 1][hr_x] != 1:
+                    hr_y -= 1
 
         elif direction == "down":
-            if y != self.height - 1:
-                if self.board[y + 1][x] == 0:
-                    for sprite in self.sprites:
-                        sprite.rect.y -= config.SIZE
-                        if sprite.rect.y < 0:
-                            sprite.rect.y = h - config.SIZE
-                    y += 1
-                    abs_y -= 1
-                    mc += 1
-
-            else:
-                if self.board[0][x] == 0:
-                    for sprite in self.sprites:
-                        sprite.rect.y -= config.SIZE
-                        if sprite.rect.y < 0:
-                            sprite.rect.y = h - config.SIZE
-                    y = 0
-                    abs_y -= 1
-                    mc += 1
+            if hr_y != self.hei - 1:
+                if self.map[hr_y + 1][hr_x] != 1:
+                    hr_y += 1
 
         elif direction == "left":
-            if x != 0:
-                if self.board[y][x - 1] == 0:
-                    for sprite in self.sprites:
-                        sprite.rect.x += config.SIZE
-                        if sprite.rect.x >= w:
-                            sprite.rect.x = 0
-                    x -= 1
-                    abs_x -= 1
-                    mc += 1
-            else:
-                if self.board[y][self.width - 1] == 0:
-                    for sprite in self.sprites:
-                        sprite.rect.x += config.SIZE
-                        if sprite.rect.x >= w:
-                            sprite.rect.x = 0
-                    x = self.width - 1
-                    abs_x -= 1
-                    mc += 1
+            if hr_x != 0:
+                if self.map[hr_y][hr_x - 1] != 1:
+                    hr_x -= 1
 
         elif direction == "right":
-            if x != self.width - 1:
-                if self.board[y][x + 1] == 0:
-                    for sprite in self.sprites:
-                        sprite.rect.x -= config.SIZE
-                        if sprite.rect.x < 0:
-                            sprite.rect.x = w - config.SIZE
-                    x += 1
-                    abs_x += 1
-                    mc += 1
-            else:
-                if self.board[y][0] == 0:
-                    for sprite in self.sprites:
-                        sprite.rect.x -= config.SIZE
-                        if sprite.rect.x < 0:
-                            sprite.rect.x = w - config.SIZE
-                    x = 0
-                    abs_x += 1
-                    mc += 1
+            if hr_x != self.wid - 1:
+                if self.map[hr_y][hr_x + 1] != 1:
+                    hr_x += 1
 
-        config.ABSOLUTE_HERO_COORDS = [abs_x, abs_y]
-        config.MOVE_COUNTER = mc
-        config.HERO_COORDS= [x, y]
+        self.hero_pos = [hr_x, hr_y]
 
 
-    def load_level(self, level_file):
-        table = []
-        try:
-            with open(f"Data/{level_file}", "r") as f:
-                for i in range(10):
-                    row = f.readline().rstrip()
-                    table.append([int(x) for x in row])
-        except FileNotFoundError:
-            print("Уровень не найден, загружаем случайный уровень.")
+    def dig(self):
+        hr_x, hr_y = self.hero_pos
 
-        self.board = table
+        if self.map[hr_y][hr_x] not in [0, 1]:
+            if self.map[hr_y][hr_x] == 3:
+                self.map[hr_y][hr_x] = 0
+
+                return "iron"
+
+            elif self.map[hr_y][hr_x] == 5:
+                self.map[hr_y][hr_x] = 0
+
+                return "gold"
+
+            elif self.map[hr_y][hr_x] == 7:
+                self.map[hr_y][hr_x] = 0
+
+                return "diamond"
+
+            elif self.map[hr_y][hr_x] == 9:
+                self.map[hr_y][hr_x] = 0
+
+                return "emerald"
+
+        return "nothing"
+
+    def reset(self):
+        self.map = [[0 for _ in range(self.wid)] for __ in range(self.hei)]
+        self.hero_pos = [4, 4]
+        self.generate_walls()
+        self.generate_ores()
